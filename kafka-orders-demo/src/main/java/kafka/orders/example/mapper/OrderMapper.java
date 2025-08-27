@@ -9,8 +9,8 @@ import kafka.orders.example.model.Order;
 @Mapper(componentModel = "spring")
 public interface OrderMapper {
 
+    @Mapping(target = "id", ignore = true)
     Order toEntity(OrderRequestDto dto);
 
-    @Mapping(target = "id", source = "id")
     OrderResponseDto toDto(Order entity);
 }
