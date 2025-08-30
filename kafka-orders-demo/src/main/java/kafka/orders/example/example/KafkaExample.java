@@ -198,6 +198,133 @@ package kafka.orders.example.example;
 // ├── Testing: @EmbeddedKafka для unit tests
 // └── When to use: High-throughput events, microservices
 
+
+
+// Apache Kafka работает на низком уровне как распределенная система для стриминга данных, где
+// ключевыми элементами являются брокеры (серверы), которые хранят и управляют данными, клиенты
+// (продюсеры и консьюмеры), общающиеся с ними по сети.
+
+// 1. Общая архитектура и сетевой протокол
+// Kafka использует бинарный протокол поверх TCP для общения между клиентами (продюсерами,
+// консьюмерами) и брокерами. Это не HTTP или что-то текстовое — чистый бинарный формат для высокой
+// производительности и низкой задержки. Протокол называется Kafka Protocol, и он request-response:
+// клиент отправляет запрос, брокер отвечает.
+
+// - Как работает соединение: Клиенты устанавливают persistent TCP-соединения с брокерами (без
+// handshake, просто connect). Соединения держатся открытыми, чтобы избежать overhead от повторных
+// подключений. По одному соединению может быть только один in-flight request (для сохранения
+// порядка), но клиенты используют non-blocking I/O, чтобы параллельно обрабатывать несколько
+// соединений. Если нужно, клиент может pipelining'овать запросы, но Kafka рекомендует ограничить
+// in-flight, чтобы избежать out-of-order.
+
+// - Формат сообщений в протоколе: Все запросы и ответы — это size-delimited бинарные blobs.
+// Структура: 4 байта на размер (INT32), за ним само сообщение. Примитивы: INT8/16/32/64
+// (big-endian), STRING (длина INT16 + байты UTF-8), COMPACT_STRING (unsigned varint для длины +
+// байты), BYTES, ARRAY и т.д. Для переменных длин — zig-zag encoding (как в Protocol Buffers).
+// Сообщения поддерживают тегированные поля (tagged fields с KIP-482) для эволюции схемы без ломания
+// совместимости.
+
+// - Версионирование: Каждый запрос имеет api_key (INT16, например 0 для Produce) и api_version
+// (INT16). Клиент сначала шлет ApiVersionsRequest (key 18), чтобы узнать, какие версии поддерживает
+// брокер, и выбирает максимальную общую. Это обеспечивает bidirectional compatibility: новый клиент
+// работает со старым брокером и наоборот.
+
+// - Обработка ошибок: Ответы содержат error_code (INT16, например -1 UNKNOWN_SERVER_ERROR, 3
+// UNKNOWN_TOPIC_OR_PARTITION). Ошибки делятся на retriable (например, NOT_LEADER_OR_FOLLOWER —
+// клиент рефрешит метадату и retry) и non-retriable (например, UNSUPPORTED_VERSION). Клиенты
+// автоматически retry на retriable ошибках.
+
+// Протокол эволюционировал: с 0.8 добавлена репликация, с 0.11 — exactly-once, с 2.0 — улучшения
+// TLS, с 3.0 — полный KRaft (без ZooKeeper).
+
+
+
+// 2. Как работают продюсеры (производители сообщений)
+// Продюсер — это клиент, который отправляет сообщения в топики.
+
+// - Поток отправки: Продюсер не шлет сразу — аккумулирует в батчах (batch.size ~16KB по
+// умолчанию, linger.ms для задержки). Ключ сообщения хэшируется (murmur2), чтобы определить
+// партицию: partition = hash(key) % num_partitions. Если нет ключа — round-robin.
+
+// - Низкоуровневый запрос: Использует ProduceRequest (api_key 0). Структура (пример v9):
+// transactional_id (COMPACT_NULLABLE_STRING), acks (INT16: 0=fire-and-forget, 1=leader ack, -1=all
+// ISR), timeout_ms (INT32), topic_data (массив: topic name + массив partition_data: index INT32 +
+// records COMPACT_RECORDS). Records — батч сообщений, сжатый (gzip/snappy/lz4/zstd) если указано.
+
+// - Под капотом: Продюсер шлет на leader-брокер партиции (узнает из MetadataRequest, api_key
+// 3). Брокер append'ит к логу, реплицирует на followers. Acks определяет, когда считать успешным:
+// для durability — all + min.insync.replicas >1. Если error — retry с backoff.
+
+// - Транзакции: С 0.11 — idempotent producers (transactional.id для fencing zombies).
+// BeginTransaction, send, commitTransaction — атомарно, с маркерами в логе.
+
+// Это обеспечивает высокую throughput: батчинг снижает I/O, компрессия — сеть.
+
+
+
+// 3. Хранение сообщений (где и как хранятся)
+// Сообщения хранятся на дисках брокеров в append-only логах. Топик — логическая категория,
+// разделенная на партиции (для параллелизма). Каждая партиция — immutable последовательность
+// записей.
+
+// - Формат хранения: Партиция — директория на диске (например, /kafka-logs/topic-partition/).
+// Внутри — сегменты: файлы вроде 00000000000000000000.log (base offset в имени). Сегмент —
+// append-only, роллится по размеру (1GB default, log.segment.bytes) или времени (log.roll.hours).
+// Каждый сегмент имеет индексы: .index (offset -> physical pos), .timeindex (timestamp -> offset
+// для поиска по времени).
+
+// - Структура записи: Message: offset (INT64), size (INT32), attributes (INT8: compression
+// type), timestamp delta (VARLONG), key length (VARINT), key, value length, value, headers (ARRAY).
+// Батчи сообщений — для efficiency.
+
+// - Очистка (cleanup): Политики — delete (по времени/размеру, log.retention.hours/ms/bytes) или
+// compact (log.cleanup.policy=compact). Compaction: background thread удаляет старые значения по
+// ключу, оставляя latest (как key-value store). Использует cleaner-offset-checkpoint для трекинга.
+
+// - Durability: Не fsync каждый раз — полагается на OS page cache + replication. Flush по
+// log.flush.interval.messages/ms. Если crash — recovery из лога.
+
+// Хранение оптимизировано: sequential writes/reads, zero-copy (sendfile для fetch), mmap для
+// индексов.
+
+
+
+// 4. Брокеры и репликация (под капотом кластера)
+// Брокеры — JVM-процессы, хранящие партиции.
+
+// - Репликация: Каждая партиция имеет replication.factor (например 3). Одна — leader (handles
+// reads/writes), остальные — followers (fetch от leader). Followers синхронизируют via FetchRequest
+// (как консьюмеры, но internal).
+
+// - ISR (In-Sync Replicas): Подмножество реплик, в sync с leader (lag <
+// replica.lag.time.max.ms). Write succeeds, если ack от min.insync.replicas (включая leader).
+// High-watermark — max offset, committed ко всем ISR.
+
+// - Лидер-элекшн: В KRaft (с 3.0) — Raft-based controller. Старый — ZooKeeper. Если leader
+// down, controller выбирает new leader из ISR, уведомляет via LeaderAndIsrRequest.
+
+// - Координация: Metadata в KRaft (Raft quorum) или ZooKeeper (old). Брокеры heartbeat'уют,
+// чтобы детектить failures.
+
+// Fault-tolerance: Если брокер down, reassignment партиций на другие.
+
+
+
+// 5. Как работают консьюмеры (потребители)
+// Консьюмер — pull-model: сам запрашивает данные.
+
+// - Запрос: FetchRequest (api_key 1). Структура (v13): max_wait_ms (INT32), min_bytes (для
+// batching), topics (topic_id UUID + partitions: fetch_offset INT64, etc.). Ответ:
+// throttle_time_ms, responses с records (COMPACT_RECORDS).
+
+// - Offsets: Консьюмер трекает offset per partition. Commit в __consumer_offsets (special
+// topic). Auto-commit или manual.
+
+// - Rebalancing: Когда join/leave group, GroupCoordinator (брокер) redistributes partitions
+// (strategies: range, round-robin). Cooperative с 2.3 — incremental.
+
+// - Под капотом: Poll loop: fetch batches (max.poll.records), process, commit. Isolation:
+// read_committed для транзакций (игнорит aborted).
 public class KafkaExample {
 
 }
