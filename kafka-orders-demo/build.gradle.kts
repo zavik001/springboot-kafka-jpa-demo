@@ -31,6 +31,7 @@ dependencies {
 	implementation("org.postgresql:postgresql")
 	implementation("org.liquibase:liquibase-core")
 	implementation("org.springframework.kafka:spring-kafka")
+	implementation("org.apache.kafka:kafka-streams")
 	compileOnly("org.projectlombok:lombok")
 	annotationProcessor("org.projectlombok:lombok")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")

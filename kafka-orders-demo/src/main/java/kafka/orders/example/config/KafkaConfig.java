@@ -8,6 +8,10 @@ import lombok.Data;
 @Component
 @ConfigurationProperties(prefix = "app.kafka")
 public class KafkaConfig {
-    private String topic;
-    private String dlqTopic = topic + ".dlq";
+    private String ordersTopic;
+    private String paymentsTopic;
+    private String inventoryTopic;
+    private String notificationsTopic;
+    private String aggregatedTopic;
+    private String dlqTopic;
 }
