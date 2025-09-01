@@ -87,6 +87,7 @@ spring:
       auto-create: false
 app:
   kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT}
     orders-topic: orders-topic
     payments-topic: payments-processed
     inventory-topic: inventory-updated

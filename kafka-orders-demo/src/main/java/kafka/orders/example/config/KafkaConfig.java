@@ -8,6 +8,7 @@ import lombok.Data;
 @Component
 @ConfigurationProperties(prefix = "app.kafka")
 public class KafkaConfig {
+    private String bootstrapServers;
     private String ordersTopic;
     private String paymentsTopic;
     private String inventoryTopic;
