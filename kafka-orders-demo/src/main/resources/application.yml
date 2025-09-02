@@ -15,79 +15,16 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/changelog-master.yaml
 
-  kafka:
-    bootstrap-servers: localhost:${KAFKA_PORT}
-    # Что: Адреса брокеров Kafka, с которых клиент начинает узнавать кластер.
-    # Spring: Используется в ProducerFactory/ConsumerFactory для инициализации клиентов.
-    # Под капотом: Kafka-клиент шлёт MetadataRequest → получает список брокеров и партиций.
-    # Итог: Клиент знает кластер, поддерживает постоянное TCP-соединение.
-
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      # Что: Сериализация ключа (String → bytes).
-      # Spring: Загружается через ProducerFactory.
-      # Под капотом: StringSerializer → UTF-8 байты, ключ участвует в partitioning (hash % partitions).
-      # Итог: Позволяет детерминированно распределять сообщения по партициям.
-
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      # Что: Сериализация значения (Object → JSON → bytes).
-      # Spring: JsonSerializer через Jackson добавляет type headers.
-      # Под капотом: JSON строка кодируется в UTF-8, в ProduceRequest передаётся длина + байты.
-      # Итог: Можно отправлять сложные объекты, а не только строки.
-
-    consumer:
-      group-id: ${KAFKA_CONSUMER_GROUP_ID}
-      # Что: Идентификатор группы потребителей.
-      # Spring: Используется DefaultKafkaConsumerFactory для @KafkaListener.
-      # Под капотом: GroupCoordinator назначает партиции, offset хранится в __consumer_offsets.
-      # Итог: Несколько consumers делят работу или читают независимо (разные group-id).
-
-      auto-offset-reset: earliest
-      # Что: С чего начинать чтение, если нет сохранённых offset.
-      # Spring: Пробрасывается в KafkaConsumer config.
-      # Под капотом: earliest = offset=0, latest = только новые.
-      # Итог: earliest — читаем всё с начала.
-
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      # Что: Десериализация ключа (bytes → String).
-      # Под капотом: UTF-8 decode. Несоответствие формата = ошибка.
-      # Итог: Соответствует StringSerializer у producer.
-
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      # Что: Десериализация значения (bytes JSON → объект).
-      # Spring: JsonDeserializer использует Jackson и type headers.
-      # Под капотом: Проверка trusted.packages (whitelist пакетов).
-      # Итог: Сообщения автоматически маппятся на POJO.
-
-      properties:
-        spring.json.trusted.packages: "*"
-        # Что: Разрешённые пакеты для десериализации.
-        # Под капотом: "*" = все (удобно для dev, но небезопасно).
-
-    streams:
-      application-id: orders-streams
-      # Что: Уникальный ID приложения Kafka Streams.
-      # Spring: Используется StreamsBuilder и хранение state.
-      # Под капотом: State хранится в changelog topics (__streams_...), восстанавливается при рестарте.
-      # Итог: Несколько инстансов с одним ID = scale out.
-
-      auto-startup: true
-      # Что: Автозапуск Kafka Streams при старте приложения.
-      # Под капотом: Spring lifecycle вызывает start().
-
-      properties:
-        default.key.serde: org.apache.kafka.common.serialization.Serdes$StringSerde
-        # Что: Стандартный SerDe (Serializer+Deserializer) для ключей.
-        # Под капотом: String <-> bytes в StreamsConfig.
-
-        default.value.serde: org.springframework.kafka.support.serializer.JsonSerde
-        # Что: SerDe для значений (JSON).
-        # Под капотом: Аналогично producer/consumer, но в контексте Streams.
-    admin:
-      auto-create: false
 app:
   kafka:
     bootstrap-servers: localhost:${KAFKA_PORT}
+    consumer-group: ${KAFKA_CONSUMER_GROUP_ID}
+    inventory-group: inventory-group
+    aggregated-group: aggregated-group
+    dlq-group: dlq-group
+    notifications-group: notifications-group
+    payments-group: payments-group
+    orders-streams: orders-streams
     orders-topic: orders-topic
     payments-topic: payments-processed
     inventory-topic: inventory-updated
