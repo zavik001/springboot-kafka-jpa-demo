@@ -28,7 +28,7 @@ public class NotificationConsumerService {
             log.info("Notification sent for order {}: {}", inventoryDto.orderId(), message);
             ack.acknowledge();
         } catch (Exception e) {
-            log.error("Error sending notification: {}", e.getMessage());
+            log.error("Error sending notification: {}", e);
         }
     }
 }

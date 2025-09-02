@@ -25,7 +25,7 @@ public class KafkaOrderProducerService {
                 .send(kafkaConfig.getOrdersTopic(), orderDto.id().toString(), orderDto);
         future.whenComplete((result, ex) -> {
             if (ex != null) {
-                log.error("Error sending order: {}", ex.getMessage());
+                log.error("Error sending order: {}", ex);
             } else {
                 log.info("Sent order to {}: offset {}", result.getRecordMetadata().topic(),
                         result.getRecordMetadata().offset());
@@ -38,7 +38,7 @@ public class KafkaOrderProducerService {
                 .send(kafkaConfig.getPaymentsTopic(), paymentDto.orderId().toString(), paymentDto);
         future.whenComplete((result, ex) -> {
             if (ex != null) {
-                log.error("Error sending payment: {}", ex.getMessage());
+                log.error("Error sending payment: {}", ex);
             } else {
                 log.info("Sent payment to {}: offset {}", result.getRecordMetadata().topic(),
                         result.getRecordMetadata().offset());
@@ -51,7 +51,7 @@ public class KafkaOrderProducerService {
                 kafkaConfig.getInventoryTopic(), inventoryDto.orderId().toString(), inventoryDto);
         future.whenComplete((result, ex) -> {
             if (ex != null) {
-                log.error("Error sending inventory: {}", ex.getMessage());
+                log.error("Error sending inventory: {}", ex);
             } else {
                 log.info("Sent inventory to {}: offset {}", result.getRecordMetadata().topic(),
                         result.getRecordMetadata().offset());
@@ -65,7 +65,7 @@ public class KafkaOrderProducerService {
                         notificationDto.orderId().toString(), notificationDto);
         future.whenComplete((result, ex) -> {
             if (ex != null) {
-                log.error("Error sending notification: {}", ex.getMessage());
+                log.error("Error sending notification: {}", ex);
             } else {
                 log.info("Sent notification to {}: offset {}", result.getRecordMetadata().topic(),
                         result.getRecordMetadata().offset());

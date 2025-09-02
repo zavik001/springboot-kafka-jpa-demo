@@ -36,7 +36,7 @@ public class PaymentConsumerService {
             }
             ack.acknowledge();
         } catch (Exception e) {
-            log.error("Error processing payment: {}", e.getMessage());
+            log.error("Error processing payment: {}", e);
         }
     }
 }

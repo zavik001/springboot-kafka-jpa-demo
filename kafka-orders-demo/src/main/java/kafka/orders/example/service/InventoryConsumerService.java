@@ -5,7 +5,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Service;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import kafka.orders.example.dto.InventoryEventDto;
 import kafka.orders.example.dto.PaymentEventDto;
 import kafka.orders.example.model.Inventory;
@@ -21,9 +21,9 @@ public class InventoryConsumerService {
     private final KafkaOrderProducerService producer;
     private final InventoryRepository inventoryRepository;
 
-    @KafkaListener(topics = "#{kafkaConfig.getPaymentsTopic()}",
-            groupId = "#{kafkaConfig.getInventoryGroup()}", concurrency = "3")
-    @Transactional
+    @KafkaListener(topics = "#{@kafkaConfig.getPaymentsTopic()}",
+            groupId = "#{@kafkaConfig.getInventoryGroup()}", concurrency = "3")
+    @Transactional(rollbackFor = Exception.class, timeout = 30)
     public void handlePayment(ConsumerRecord<String, PaymentEventDto> record, Acknowledgment ack) {
         PaymentEventDto paymentDto = record.value();
         try {
@@ -50,7 +50,7 @@ public class InventoryConsumerService {
             }
             ack.acknowledge();
         } catch (Exception e) {
-            log.error("Error processing inventory: {}", e.getMessage());
+            log.error("Error processing inventory: {}", e);
         }
     }
 }
