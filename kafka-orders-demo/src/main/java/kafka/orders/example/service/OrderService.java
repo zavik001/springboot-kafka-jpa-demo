@@ -14,7 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 public class OrderService {
 
-    private final KafkaOrderProducerService kafkaProducer;
+    private final KafkaOrderProducerService producer;
     private final OrderRepository repository;
     private final OrderMapper mapper;
 
@@ -24,7 +24,7 @@ public class OrderService {
         log.info("saved order: {}", savedOrder);
         OrderResponseDto response = mapper.toDto(savedOrder);
 
-        kafkaProducer.sendOrder(response);
+        producer.sendOrder(response);
 
         return response;
     }
