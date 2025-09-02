@@ -9,6 +9,13 @@ import lombok.Data;
 @ConfigurationProperties(prefix = "app.kafka")
 public class KafkaConfig {
     private String bootstrapServers;
+    private String consumerGroup;
+    private String inventoryGroup;
+    private String aggregatedGroup;
+    private String dlqGroup;
+    private String notificationsGroup;
+    private String paymentsGroup;
+    private String ordersStreams;
     private String ordersTopic;
     private String paymentsTopic;
     private String inventoryTopic;
